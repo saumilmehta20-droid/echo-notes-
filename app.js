@@ -487,6 +487,19 @@ function buildFromTranscript(title, segs) {
   }
   return { title, id: 'lec_' + Date.now(), transcript, notes, cards, graph: { nodes, edges } };
 }
+function graphFromTopics(title, labels) {
+  const labs = (labels || []).filter(Boolean).slice(0, 8);
+  const perRow = 5;
+  const nodes = [{ id: 'root', label: fitLabel(title, 18) || 'Lecture', x: 360, y: 50 }];
+  labs.forEach((l, i) => {
+    const row = Math.floor(i / perRow), col = i % perRow;
+    const n = Math.min(perRow, labs.length - row * perRow);
+    nodes.push({ id: 'n' + i, label: fitLabel(l, 16), x: Math.round(360 + (col - (n - 1) / 2) * 130), y: row === 0 ? 190 : 310 });
+  });
+  const edges = labs.map((_, i) => ({ a: 'root', b: 'n' + i, label: 'covers' }));
+  for (let i = 0; i + 1 < labs.length; i++) edges.push({ a: 'n' + i, b: 'n' + (i + 1), label: 'then' });
+  return { nodes, edges };
+}
 $('buildFromLiveBtn').onclick = () => {
   if (!liveSegs.length) return alert('No transcript yet — Start Live Transcription + play video first (or Load Demo).');
   state.data = buildFromTranscript($('lectureTitle').value || 'Live lecture', liveSegs);
@@ -545,21 +558,45 @@ async function processLecture(useDemo) {
         setProcessMsg(err); setLiveStatus(err);
         return;
       }
-      setProcessMsg('AI pass 3/3 — writing handwritten notes…');
-      state.data = buildFromTranscript(title, liveSegs);
+      setProcessMsg('AI pass 3/3 — Groq AI studying the lecture… (about 10 seconds)');
+      state.data = buildFromTranscript(title, liveSegs); // instant offline base
       state.data.id = 'lec_' + Date.now();
       state.data.source = { yt: j.videoId };
       const box = $('liveList'); if (box) { box.innerHTML = ''; liveSegs.forEach(s => { const d = document.createElement('div'); d.className = 'trow'; d.innerHTML = `<span class="ts">[${fmt(s.t)}]</span> ${s.text}`; d.querySelector('.ts').onclick = () => seekTo(s.t); box.appendChild(d); }); }
       setLiveStatus(`YouTube captions loaded: ${liveSegs.length} segments from "${title}".`);
       state.cardIdx = 0; state.known = new Set();
-      renderAll(); renderLibrary(); renderTerms(); renderChat();
-      if (!state.data.notes.length) {
-        setProcessMsg('Transcript loaded but no standout points found — the video may be mostly music/intros. Try a longer lecture.');
-        go('transcript'); return;
+      try {
+        const ar = await fetch(API_BASE + '/api/ai-notes', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, segments: liveSegs.slice(0, 150) }),
+        });
+        const aj = await ar.json();
+        if (!ar.ok) throw new Error((aj && aj.error) || ('HTTP ' + ar.status));
+        if (!aj.notes || !aj.notes.length) throw new Error('AI returned no notes');
+        state.data.notes = aj.notes;
+        if (aj.cards && aj.cards.length) state.data.cards = aj.cards;
+        state.cardIdx = 0; state.known = new Set();
+        let tps = (aj.topics || []).map(t => t.label).filter(Boolean);
+        if (!tps.length) {
+          tps = [];
+          aj.notes.forEach(n => {
+            const l = (n.topic || String(n.title).split(':')[0]).trim();
+            if (l && !tps.includes(l)) tps.push(l);
+          });
+        }
+        state.data.graph = graphFromTopics(state.data.title, tps);
+        renderAll(); renderLibrary(); renderTerms(); renderChat();
+        setProcessMsg(`Done — AI wrote ${state.data.notes.length} notes + ${state.data.cards.length} cards from "${title}".`, false);
+        go('notes'); return;
+      } catch (e) {
+        renderAll(); renderLibrary(); renderTerms(); renderChat();
+        if (!state.data.notes.length) {
+          setProcessMsg('Transcript loaded but no standout points found — the video may be mostly music/intros. Try a longer lecture.');
+          go('transcript'); return;
+        }
+        setProcessMsg(`AI unavailable (${e.message}) — offline notes shown instead.`, false);
+        go('notes'); return;
       }
-      setProcessMsg(`Done — ${state.data.notes.length} notes + ${state.data.cards.length} cards written from "${title}".`, false);
-      go('notes');
-      return;
     } catch (e) {
       const err = 'Cannot reach the server. Start it first: cd echoNotes/server, then: node server.js (' + e.message + ')';
       setProcessMsg(err); setLiveStatus(err);
@@ -841,10 +878,27 @@ async function renderChat() {
   hist.forEach(m=>{ const d=document.createElement('div'); d.className='cmsg '+(m.who==='You'?'me':''); d.innerHTML=`<div class="who">${m.who}</div><div>${m.text}</div>`; box.appendChild(d); });
   box.scrollTop=box.scrollHeight;
 }
+async function aiAnswer(q) {
+  // Groq AI answer grounded in the current lecture; throws if unavailable
+  if (!state.data) return 'Process a lecture first.';
+  const r = await fetch(API_BASE + '/api/ai-ask', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: q, title: state.data.title,
+      notes: (state.data.notes || []).map(n => ({ ts: n.ts, title: n.title, body: n.body })),
+      transcript: (state.data.transcript || []).filter(x => !x.noise).map(x => `[${fmt(x.t)}] ${x.text}`).join('\n'),
+    }),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error((j && j.error) || ('HTTP ' + r.status));
+  return j.answer;
+}
 $('chatSend').onclick = async () => {
   if(!curUser()) return alert('Login first');
   const q=$('chatInput').value.trim(); if(!q) return;
-  const a=answer(q);
+  let a;
+  try { a = await aiAnswer(q); }
+  catch (e) { a = answer(q) + ' (offline answer — AI: ' + e.message + ')'; }
   if (getToken() && state.data?.id) {
     try { await api('/api/chats/'+state.data.id, { method: 'POST', body: JSON.stringify({ who: 'You', text: q }) });
       await api('/api/chats/'+state.data.id, { method: 'POST', body: JSON.stringify({ who: 'echoNotes', text: a }) });

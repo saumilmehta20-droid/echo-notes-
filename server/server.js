@@ -1,4 +1,5 @@
 // echoNotes backend — Express + SQLite (node:sqlite) + JWT. Serves frontend too.
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -224,6 +225,68 @@ app.get('/api/youtube-transcript', async (req, res) => {
       if (last && s.t - last.t < 8) last.text += ' ' + s.text; else merged.push({ ...s });
     }
     res.json({ videoId: id, title, segments: merged.slice(0, 500) });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+// --- AI study engine (Groq). Local offline pipeline in app.js is the fallback. ---
+const GROQ_KEY = process.env.GROQ_API_KEY || '';
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+async function groqChat(messages, jsonMode) {
+  if (!GROQ_KEY) throw new Error('AI not configured (GROQ_API_KEY missing)');
+  const body = { model: GROQ_MODEL, messages, temperature: 0.3, max_tokens: 4000 };
+  if (jsonMode) body.response_format = { type: 'json_object' };
+  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + GROQ_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error('AI request failed: HTTP ' + r.status + ' ' + (await r.text()).slice(0, 200));
+  const j = await r.json();
+  return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+}
+function mmss(s) { return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0'); }
+
+// POST /api/ai-notes { title, segments:[{t,text}] } -> { notes, cards, topics }
+app.post('/api/ai-notes', async (req, res) => {
+  try {
+    const { title, segments } = req.body || {};
+    if (!segments || !segments.length) return res.status(400).json({ error: 'segments required' });
+    const clipped = segments.slice(0, 150);
+    const script = clipped.map(s => `[${mmss(s.t)}] ${s.text}`).join('\n').slice(0, 14000);
+    const out = await groqChat([
+      { role: 'system', content: 'You are echoNotes, an expert study assistant. Convert the lecture transcript into structured study material. Return ONLY valid JSON, no markdown, no commentary.' },
+      { role: 'user', content: `Lecture: "${title || 'Untitled'}".\n\nTranscript (timestamps [mm:ss]):\n${script}\n\nReturn JSON exactly like:\n{"topics":[{"label":"..."}],"notes":[{"title":"...","ts":0,"level":"core"|"supporting","kind":"definition"|"cause"|"evidence"|"application"|"key","body":"..."}],"cards":[{"q":"...","a":"...","src":"..."}]}\n\nRules: 10-14 notes ordered by lecture time; "core" = exam-critical ideas, "supporting" = evidence/examples; kind must match content (definition/cause/evidence/application/key); ts = segment start in SECONDS (number) closest to where the idea is spoken; body = 1-3 condensed sentences in the lecturer's meaning, no invented facts; titles short ("Sigmoid Function — definition", "Evidence: ...", "Example: ...", "Why: ..."); 6-8 cards incl. definitional "What is X?" and the lecturer's own questions with their answers; card src like "10:32".` },
+    ], true);
+    let j;
+    try { j = JSON.parse(out); } catch { return res.status(502).json({ error: 'AI returned invalid JSON' }); }
+    const levels = new Set(['core', 'supporting']), kinds = new Set(['definition', 'cause', 'evidence', 'application', 'key']);
+    const notes = (j.notes || []).filter(n => n && n.title && n.body).slice(0, 14).map(n => ({
+      title: String(n.title).slice(0, 120), ts: Math.max(0, parseInt(n.ts) || 0),
+      level: levels.has(n.level) ? n.level : 'supporting', kind: kinds.has(n.kind) ? n.kind : 'key',
+      body: String(n.body).slice(0, 600), topic: String(n.topic || '').slice(0, 40),
+    }));
+    const cards = (j.cards || []).filter(c => c && c.q && c.a).slice(0, 8).map(c => ({
+      q: String(c.q).slice(0, 200), a: String(c.a).slice(0, 600), src: String(c.src || '').slice(0, 60),
+    }));
+    const topics = (j.topics || []).filter(t => t && t.label).slice(0, 8).map(t => ({ label: String(t.label).slice(0, 24) }));
+    if (!notes.length) return res.status(502).json({ error: 'AI returned no notes' });
+    res.json({ notes, cards, topics });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+// POST /api/ai-ask { question, title, notes, transcript } -> { answer }
+app.post('/api/ai-ask', async (req, res) => {
+  try {
+    const { question, title, notes, transcript } = req.body || {};
+    if (!question) return res.status(400).json({ error: 'question required' });
+    const ctx = [
+      'Lecture: ' + (title || 'Untitled'),
+      'Key notes:\n' + (notes || []).slice(0, 14).map(n => `- [${mmss(n.ts || 0)}] ${n.title}: ${n.body}`).join('\n'),
+      'Transcript excerpt:\n' + String(transcript || '').slice(0, 9000),
+    ].join('\n\n');
+    const answer = await groqChat([
+      { role: 'system', content: 'You are echoNotes tutor. Answer ONLY from the lecture material below. Be concise (2-5 sentences). Cite the timestamp [mm:ss] of supporting material. If the lecture does not cover it, say so.' },
+      { role: 'user', content: ctx + '\n\nQuestion: ' + question },
+    ], false);
+    res.json({ answer });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
