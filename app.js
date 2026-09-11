@@ -806,7 +806,7 @@ function dl(name, text, type) {
 
 // ---- Backend API (cross-device) with localStorage fallback ----
 const API_BASE = (location.protocol.startsWith('http') && location.port === '3000') ? '' : 'http://localhost:3000';
-const getToken = () => localStorage.getItem('echoNotes_token');
+const getToken = () => null; // logins removed: single local workspace, browser storage only
 async function api(path, opts = {}) {
   const r = await fetch(API_BASE + path, {
     ...opts,
@@ -828,42 +828,17 @@ async function checkBackend() {
     if (msg) msg.textContent = t;
   };
   try {
-    await fetch(API_BASE + '/api/me', { headers: getToken() ? { Authorization: 'Bearer ' + getToken() } : {} });
+    await fetch(API_BASE + '/', { method: 'HEAD' });
     backendOn = true; paint(true, 'server live');
   } catch { backendOn = false; paint(false, 'server offline — run node server.js'); }
 }
 checkBackend();
-// ---- Auth: backend first, local fallback ----
-const hash = s => btoa(unescape(encodeURIComponent('echo:'+s))).split('').reverse().join('');
-const getUsers = () => { try { return JSON.parse(localStorage.getItem('echoNotes_users'))||{} } catch { return {} } };
-const setUsers = u => localStorage.setItem('echoNotes_users', JSON.stringify(u));
-const curUser = () => localStorage.getItem('echoNotes_session');
+// ---- Local workspace (no logins): everything saves in this browser ----
+const curUser = () => 'local';
 function refreshAuthUI() {
-  const u = curUser();
-  $('userLabel').textContent = u ? 'Logged in: '+u : 'Not logged in';
-  $('logoutBtn').classList.toggle('hidden', !u);
+  const l = $('userLabel');
+  if (l) l.textContent = 'Local workspace';
 }
-$('signupBtn').onclick = async () => {
-  const u=$('authUser').value.trim(), p=$('authPass').value;
-  if(!u||!p) return alert('Enter username + password');
-  try { const r = await api('/api/signup', { method: 'POST', body: JSON.stringify({ username: u, password: p }) });
-    localStorage.setItem('echoNotes_token', r.token); localStorage.setItem('echoNotes_session', r.username);
-    backendOn = true; refreshAuthUI(); renderLibrary(); renderTerms(); renderChat(); return;
-  } catch (e) { if (!String(e.message).includes('Failed to fetch')) return alert(e.message); }
-  const users=getUsers(); if(users[u]) return alert('User exists, login instead');
-  users[u]={ph:hash(p)}; setUsers(users);
-  localStorage.setItem('echoNotes_session', u); refreshAuthUI(); renderLibrary(); renderTerms(); renderChat();
-};
-$('loginBtn').onclick = async () => {
-  const u=$('authUser').value.trim(), p=$('authPass').value;
-  try { const r = await api('/api/login', { method: 'POST', body: JSON.stringify({ username: u, password: p }) });
-    localStorage.setItem('echoNotes_token', r.token); localStorage.setItem('echoNotes_session', r.username);
-    backendOn = true; refreshAuthUI(); renderLibrary(); renderTerms(); renderChat(); return;
-  } catch (e) { if (!String(e.message).includes('Failed to fetch')) return alert(e.message); }
-  const users=getUsers(); if(!users[u]||users[u].ph!==hash(p)) return alert('Invalid login (backend offline, local check failed)');
-  localStorage.setItem('echoNotes_session', u); refreshAuthUI(); renderLibrary(); renderTerms(); renderChat();
-};
-$('logoutBtn').onclick = () => { localStorage.removeItem('echoNotes_session'); localStorage.removeItem('echoNotes_token'); refreshAuthUI(); renderLibrary(); renderTerms(); renderChat(); };
 
 // ---- Library: save/load lectures per user ----
 const libKey = () => 'echoNotes_libs_'+(curUser()||'__guest');

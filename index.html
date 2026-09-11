@@ -19,13 +19,8 @@
       <div class="brand"><span class="logo" aria-hidden="true">◉</span> echoNotes</div>
       <div class="tagline">Recorded lectures → usable conceptual notes</div>
     </div>
-    <div class="authbox" aria-label="Account">
-      <span id="userLabel" class="muted status">Not logged in</span>
-      <input id="authUser" placeholder="username" autocomplete="username" />
-      <input id="authPass" type="password" placeholder="password" autocomplete="current-password" />
-      <button id="loginBtn">Login</button>
-      <button id="signupBtn" class="primary">Sign up</button>
-      <button id="logoutBtn" class="hidden">Logout</button>
+    <div class="authbox" aria-label="Workspace">
+      <span class="muted status">Local workspace · no login needed</span>
     </div>
   </div>
   <nav class="tabs wrap" aria-label="Workspace sections">
@@ -198,8 +193,8 @@
     <div class="card">
       <div class="cardhead">
         <div class="eyebrow">Shelf</div>
-        <h2>My library <span class="pill">per account</span></h2>
-        <p class="lede">Saved lectures follow your login across devices when the server is running.</p>
+        <h2>My library <span class="pill">saved in this browser</span></h2>
+        <p class="lede">Lectures you save stay in this browser's library.</p>
       </div>
       <div id="libraryList" class="tlist"></div>
     </div>
@@ -211,7 +206,7 @@
       <div class="cardhead">
         <div class="eyebrow">Shelf</div>
         <h2>Key terms <span class="pill">glossary</span></h2>
-        <p class="lede">Pin the vocabulary that matters. Terms are seeded from your notes and saved to your account.</p>
+        <p class="lede">Pin the vocabulary that matters. Terms are seeded from your notes and saved in this browser.</p>
       </div>
       <div class="row termform"><input id="termInput" placeholder="Term — e.g. Chlorophyll" /><input id="termDef" placeholder="Definition…" /><button id="addTermBtn" class="primary">Save term</button></div>
       <div id="termsList" class="tlist"></div>
@@ -224,7 +219,7 @@
     <div class="card">
       <div class="cardhead">
         <div class="eyebrow">Shelf</div>
-        <h2>Ask this lecture <span class="pill">saved per account</span></h2>
+        <h2>Ask this lecture <span class="pill">saved in this browser</span></h2>
         <p class="lede">Questions are answered from your transcript and notes — with timestamps, not guesses.</p>
       </div>
       <div id="chatBox" class="chat" aria-live="polite"></div>
