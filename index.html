@@ -177,14 +177,18 @@
   </section>
 
   <!-- DIAGRAM -->
-  <section id="tab-diagram" class="panel" aria-label="Concept map">
+  <section id="tab-diagram" class="panel" aria-label="Mindmap">
     <div class="card">
       <div class="cardhead">
         <div class="eyebrow">Step 03 — Connect</div>
-        <h2>Concept map <span class="pill">links far-apart ideas</span></h2>
-        <p class="lede">Ideas introduced minutes apart belong together. Select a node to see its note and jump to the video moment.</p>
+        <h2>AI mindmap <span class="pill">central topic → branches → details</span></h2>
+        <p class="lede">One central idea, branching sub-topics, leaf details — each node jumps to its video moment. Built by AI from your notes, offline fallback included.</p>
+        <div class="row toolbar">
+          <button id="aiMindmapBtn" class="primary">✨ AI mindmap</button>
+          <span id="mindmapMsg" class="muted" aria-live="polite"></span>
+        </div>
       </div>
-      <svg id="graph" viewBox="0 0 720 380" class="graph" role="img" aria-label="Concept map"></svg>
+      <svg id="graph" viewBox="0 0 760 420" class="graph" role="img" aria-label="Mindmap"></svg>
       <div id="nodeInfo" class="muted captionbar">Select a node…</div>
     </div>
   </section>

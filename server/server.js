@@ -259,14 +259,22 @@ app.post('/api/ai-key', async (req, res) => {
 });
 async function groqChat(messages, jsonMode) {
   if (!GROQ_KEY) throw new Error('AI not configured (GROQ_API_KEY missing)');
-  const body = { model: GROQ_MODEL, messages, temperature: 0.3, max_tokens: 4000 };
-  if (jsonMode) body.response_format = { type: 'json_object' };
-  const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST', headers: { Authorization: 'Bearer ' + GROQ_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error('AI request failed: HTTP ' + r.status + ' ' + (await r.text()).slice(0, 200));
-  const j = await r.json();
-  return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+  const models = [GROQ_MODEL, 'llama-3.1-8b-instant', 'openai/gpt-oss-20b'].filter((m, i, a) => m && a.indexOf(m) === i);
+  let lastErr = '';
+  for (const model of models) {
+    const body = { model, messages, temperature: 0.3, max_tokens: 4000 };
+    if (jsonMode) body.response_format = { type: 'json_object' };
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + GROQ_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (r.ok) {
+      const j = await r.json();
+      return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    }
+    lastErr = 'HTTP ' + r.status + ' ' + (await r.text()).slice(0, 200);
+    if (!/model_not_found|does not exist|decommissioned/i.test(lastErr)) throw new Error('AI request failed: ' + lastErr);
+  }
+  throw new Error('AI request failed: ' + lastErr);
 }
 function mmss(s) { return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0'); }
 
@@ -313,6 +321,29 @@ app.post('/api/ai-ask', async (req, res) => {
       { role: 'user', content: ctx + '\n\nQuestion: ' + question },
     ], false);
     res.json({ answer });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+// POST /api/ai-mindmap { title, notes:[{title,ts,level,kind,body}] } -> { root:{label,ts,children:[...]} }
+app.post('/api/ai-mindmap', async (req, res) => {
+  try {
+    const { title, notes } = req.body || {};
+    if (!notes || !notes.length) return res.status(400).json({ error: 'notes required' });
+    const list = notes.slice(0, 14).map(n => `- [${mmss(n.ts || 0)}] (${n.level}/${n.kind}) ${n.title}: ${String(n.body || '').slice(0, 220)}`).join('\n');
+    const out = await groqChat([
+      { role: 'system', content: 'You are echoNotes. Build a hierarchical mindmap from lecture notes. Return ONLY valid JSON, no markdown, no commentary.' },
+      { role: 'user', content: `Lecture: "${title || 'Untitled'}".\n\nNotes:\n${list}\n\nReturn JSON exactly like:\n{"root":{"label":"...","children":[{"label":"...","ts":0,"children":[{"label":"...","ts":0}]}]}}\n\nRules: root = the lecture's central topic (2-5 words); 3-6 main branches covering distinct sub-topics; each branch has 2-4 leaf details; every label 2-6 words, no invented facts, use lecture vocabulary; ts = timestamp in SECONDS (number) of a note supporting that node (0 if none).` },
+    ], true);
+    let j;
+    try { j = JSON.parse(out); } catch { return res.status(502).json({ error: 'AI returned invalid JSON' }); }
+    const cleanNode = (n, depth) => {
+      if (!n || !n.label || depth > 2) return null;
+      const kids = (n.children || []).slice(0, depth === 0 ? 6 : 4).map(k => cleanNode(k, depth + 1)).filter(Boolean);
+      return { label: String(n.label).slice(0, 40), ts: Math.max(0, parseInt(n.ts) || 0), children: kids };
+    };
+    const root = cleanNode(j.root, 0);
+    if (!root || !root.children.length) return res.status(502).json({ error: 'AI returned no branches' });
+    res.json({ root });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 

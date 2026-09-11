@@ -686,24 +686,108 @@ $('prevCard').onclick = () => { state.cardIdx = (state.cardIdx-1+state.data.card
 $('shuffleCards').onclick = () => { state.data.cards.sort(()=>Math.random()-.5); state.cardIdx=0; renderCards(); };
 $('knowBtn').onclick = () => { state.known.add(state.cardIdx); renderCards(); };
 
-function renderGraph() {
-  const svg = $('graph'); svg.innerHTML = '';
-  const pos = {}; state.data.graph.nodes.forEach(n => pos[n.id]=n);
-  state.data.graph.edges.forEach(e => {
-    const a=pos[e.a], b=pos[e.b];
-    svg.innerHTML += `<line class="gedge" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
-    svg.innerHTML += `<text class="gelabel" x="${(a.x+b.x)/2}" y="${(a.y+b.y)/2-4}">${e.label}</text>`;
+// ---- Mindmap: tree {label, ts, children[]} -> tidy-tree SVG in #graph ----
+const MM_COLORS = ['#2DD4BF', '#6EA8FE', '#A78BFA', '#F5B14C', '#34D399', '#F38BA8'];
+function buildLocalMindmap() {
+  // offline fallback: central title -> topic branches -> top note titles as leaves
+  const byTopic = {};
+  (state.data.notes || []).forEach(n => {
+    const k = (n.topic || n.kind || 'Key points').slice(0, 32);
+    (byTopic[k] = byTopic[k] || []).push(n);
   });
-  state.data.graph.nodes.forEach(n => {
-    const g = document.createElementNS("http://www.w3.org/2000/svg","g");
-    g.innerHTML = `<rect class="gnode" x="${n.x-60}" y="${n.y-18}" width="120" height="36" rx="10"/><text class="glabel" x="${n.x}" y="${n.y+4}">${n.label}</text>`;
-    g.onclick = () => {
-      const note = state.data.notes.find(x => x.title.toLowerCase().includes(n.label.split(' ')[0].toLowerCase()));
-      $('nodeInfo').textContent = note ? `${n.label} → ${note.title} [${fmt(note.ts)}]: ${note.body}` : n.label;
-    };
-    svg.appendChild(g);
-  });
+  const topics = Object.keys(byTopic).slice(0, 6);
+  return {
+    label: (state.data.title || 'Lecture').split(/[-–:|]/)[0].trim().slice(0, 32) || 'Lecture', ts: 0,
+    children: topics.map(t => ({
+      label: t, ts: byTopic[t][0].ts,
+      children: byTopic[t].slice(0, 3).map(n => ({
+        label: (n.title.split(':').pop() || n.title).trim().slice(0, 36), ts: n.ts, children: [],
+      })),
+    })),
+  };
 }
+function renderMindmap(root) {
+  const svg = $('graph'); if (!svg || !root) return;
+  const NS = 'http://www.w3.org/2000/svg';
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const ROW_H = 64, COL_W = 215, TOP = 42, LEFT = 30;
+  let row = 0;
+  (function assign(n, depth) {
+    n.depth = depth;
+    if (!n.children || !n.children.length) n.row = row++;
+    else { n.children.forEach(c => assign(c, depth + 1)); n.row = (n.children[0].row + n.children[n.children.length - 1].row) / 2; }
+  })(root, 0);
+  (function place(n) {
+    n.x = LEFT + n.depth * COL_W + (n.depth === 0 ? 20 : 0);
+    n.y = TOP + n.row * ROW_H;
+    (n.children || []).forEach(place);
+  })(root);
+  const nodeW = n => Math.max(70, (n.label.length > 26 ? 26 : n.label.length) * (n.depth === 0 ? 15 : n.depth === 1 ? 12.5 : 11) * 0.58 + 26);
+  let minL = Infinity, maxR = 0;
+  (function measure(n) {
+    minL = Math.min(minL, n.x - nodeW(n) / 2);
+    maxR = Math.max(maxR, n.x + nodeW(n) / 2);
+    (n.children || []).forEach(measure);
+  })(root);
+  const shift = minL < 8 ? 8 - minL : 0;
+  if (shift) (function mv(n) { n.x += shift; (n.children || []).forEach(mv); })(root);
+  svg.setAttribute('viewBox', `0 0 ${Math.ceil(maxR + shift + 24)} ${TOP * 2 + Math.max(1, row) * ROW_H + 20}`);
+  const mk = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+  (function draw(n, color) {
+    const col = n.depth === 0 ? '#2DD4BF' : (color || MM_COLORS[0]);
+    (n.children || []).forEach((c, i) => {
+      const cc = n.depth === 0 ? MM_COLORS[i % MM_COLORS.length] : col;
+      svg.appendChild(mk('path', { d: `M${n.x},${n.y} C${n.x + 70},${n.y} ${c.x - 70},${c.y} ${c.x},${c.y}`, fill: 'none', stroke: cc, 'stroke-width': n.depth === 0 ? 2.4 : 1.4, opacity: n.depth === 0 ? .85 : .55 }));
+      draw(c, cc);
+    });
+    const g = mk('g', { style: 'cursor:pointer' });
+    const fs = n.depth === 0 ? 15 : n.depth === 1 ? 12.5 : 11;
+    const label = n.label.length > 26 ? n.label.slice(0, 25) + '…' : n.label;
+    const bw = Math.max(70, label.length * fs * 0.58 + 26);
+    const bh = n.depth === 0 ? 40 : 32;
+    g.appendChild(mk('rect', { x: n.x - bw / 2, y: n.y - bh / 2, width: bw, height: bh, rx: bh / 2, fill: n.depth === 0 ? '#0E2B28' : '#182449', stroke: col, 'stroke-width': n.depth === 0 ? 2 : 1.3 }));
+    const t = mk('text', { x: n.x, y: n.y + fs * 0.35, 'text-anchor': 'middle', fill: '#E9EEF7', 'font-size': fs, 'font-weight': n.depth < 2 ? 700 : 500, 'font-family': 'Inter,Segoe UI,sans-serif' });
+    t.textContent = label;
+    g.appendChild(t);
+    if (n.ts) {
+      const ts = mk('text', { x: n.x, y: n.y + bh / 2 + 13, 'text-anchor': 'middle', fill: '#67748F', 'font-size': 9.5, 'font-family': 'JetBrains Mono,monospace' });
+      ts.textContent = fmt(n.ts);
+      g.appendChild(ts);
+    }
+    g.addEventListener('click', () => {
+      const first = (n.label || '').split(' ')[0].toLowerCase();
+      const note = (state.data.notes || []).find(x => first && x.title.toLowerCase().includes(first));
+      $('nodeInfo').textContent = note ? `${n.label} → ${note.title} [${fmt(note.ts)}]: ${note.body}` : (n.label + (n.ts ? ` [${fmt(n.ts)}]` : ''));
+      if (n.ts) seekTo(n.ts);
+    });
+    svg.appendChild(g);
+  })(root);
+}
+function renderGraph() {
+  if (!state.data) return;
+  if (!state.data.mindmap) state.data.mindmap = buildLocalMindmap();
+  renderMindmap(state.data.mindmap);
+}
+if ($('aiMindmapBtn')) $('aiMindmapBtn').onclick = async () => {
+  const msg = $('mindmapMsg');
+  if (!state.data || !(state.data.notes || []).length) { if (msg) msg.textContent = 'Process a lecture first.'; return; }
+  if (msg) msg.textContent = 'AI is drawing the mindmap… (about 10 seconds)';
+  try {
+    const r = await fetch(API_BASE + '/api/ai-mindmap', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: state.data.title, notes: state.data.notes.map(n => ({ title: n.title, ts: n.ts, level: n.level, kind: n.kind, body: n.body })) }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error((j && j.error) || ('HTTP ' + r.status));
+    state.data.mindmap = j.root;
+    renderMindmap(j.root);
+    if (msg) msg.textContent = '';
+  } catch (e) {
+    state.data.mindmap = buildLocalMindmap();
+    renderMindmap(state.data.mindmap);
+    if (msg) msg.textContent = 'AI unavailable (' + e.message + ') — offline map shown.';
+  }
+};
 
 $('exportTxt').onclick = () => {
   if(!state.data) return alert('Process a lecture first');
