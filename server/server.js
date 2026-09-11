@@ -229,8 +229,34 @@ app.get('/api/youtube-transcript', async (req, res) => {
 });
 
 // --- AI study engine (Groq). Local offline pipeline in app.js is the fallback. ---
-const GROQ_KEY = process.env.GROQ_API_KEY || '';
+let GROQ_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const ENV_FILE = path.join(__dirname, '.env');
+function persistGroqKey(key) {
+  GROQ_KEY = key;
+  try {
+    let txt = fs.existsSync(ENV_FILE) ? fs.readFileSync(ENV_FILE, 'utf8') : '';
+    if (/^GROQ_API_KEY=/m.test(txt)) txt = txt.replace(/^GROQ_API_KEY=.*$/m, 'GROQ_API_KEY=' + key);
+    else txt += (txt.endsWith('\n') || !txt ? '' : '\n') + 'GROQ_API_KEY=' + key + '\n';
+    fs.writeFileSync(ENV_FILE, txt);
+  } catch (e) { console.log('could not persist key:', e.message); }
+}
+async function checkGroqKey(key) {
+  const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: 'Bearer ' + key } });
+  if (!r.ok) throw new Error('Groq rejected the key (HTTP ' + r.status + ') — copy a fresh one from console.groq.com/keys');
+}
+// GET /api/ai-status -> { configured, model } (never exposes the key)
+app.get('/api/ai-status', (req, res) => res.json({ configured: !!GROQ_KEY, model: GROQ_MODEL }));
+// POST /api/ai-key { key } -> validates with Groq, saves to .env, hot-reloads
+app.post('/api/ai-key', async (req, res) => {
+  try {
+    const key = String((req.body || {}).key || '').trim();
+    if (!/^gsk_[A-Za-z0-9]{10,}$/.test(key)) return res.status(400).json({ error: 'That does not look like a Groq key (it starts with gsk_)' });
+    await checkGroqKey(key);
+    persistGroqKey(key);
+    res.json({ ok: true, model: GROQ_MODEL });
+  } catch (e) { res.status(400).json({ error: String(e.message || e) }); }
+});
 async function groqChat(messages, jsonMode) {
   if (!GROQ_KEY) throw new Error('AI not configured (GROQ_API_KEY missing)');
   const body = { model: GROQ_MODEL, messages, temperature: 0.3, max_tokens: 4000 };

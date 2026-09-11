@@ -915,3 +915,29 @@ $('chatClear').onclick = async () => {
 // restore last title + auth
 try { const s = JSON.parse(localStorage.getItem('echoNotes')); if(s?.title) $('lectureTitle').value = s.title; } catch {}
 refreshAuthUI(); renderLibrary(); renderTerms(); renderChat();
+
+// ---- AI engine setup panel (key stays on server, never in GitHub) ----
+async function refreshAiStatus() {
+  const pill = $('aiStatus'), msg = $('aiKeyMsg');
+  if (!pill) return;
+  try {
+    const r = await fetch(API_BASE + '/api/ai-status');
+    const j = await r.json();
+    pill.textContent = j.configured ? 'AI live · ' + (j.model || '') : 'offline notes';
+    if (msg && !msg.dataset.touched) msg.textContent = j.configured ? '' : 'No AI key saved — add one for AI notes, or continue offline.';
+  } catch { pill.textContent = 'server offline'; }
+}
+if ($('aiKeySave')) $('aiKeySave').onclick = async () => {
+  const k = $('aiKey').value.trim(), msg = $('aiKeyMsg');
+  if (!k) return;
+  msg.className = 'muted'; msg.dataset.touched = '1'; msg.textContent = 'Checking key with Groq…';
+  try {
+    const r = await fetch(API_BASE + '/api/ai-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: k }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    msg.className = 'ok'; msg.textContent = 'AI live — notes + chat now use Groq. Key saved on your server.';
+    $('aiKey').value = '';
+    refreshAiStatus();
+  } catch (e) { msg.className = 'err'; msg.textContent = 'Not saved: ' + e.message; }
+};
+refreshAiStatus();

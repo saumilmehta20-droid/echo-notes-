@@ -40,6 +40,14 @@ p{margin:0}
 .srvdot.off{color:var(--red);text-shadow:0 0 8px var(--red)}
 .srvmsg{color:var(--faint);letter-spacing:.02em;text-transform:none;font-weight:500}
 #processMsg{margin-top:14px}
+.aipanel{margin-top:18px;background:var(--inset);border:1px solid var(--line);border-radius:14px;padding:16px}
+.aihead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.aipanel .hint{margin-bottom:10px}
+.airow{margin-top:0}
+.airow input{flex:1;font-family:var(--font-mono);font-size:12.5px}
+#aiKeyMsg{margin-top:8px;font-size:13px}
+#aiKeyMsg.ok{color:var(--green)}
+#aiKeyMsg.err{color:var(--red)}
 .brand{font-family:var(--font-display);font-size:26px;font-weight:800;letter-spacing:-.02em}
 .logo{color:var(--accent)}
 .tagline{color:var(--sub);font-size:13px;margin-top:2px}

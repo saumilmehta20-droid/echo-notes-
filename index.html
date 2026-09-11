@@ -89,6 +89,12 @@
           <div data-step="extract">Extract<span>Central concepts vs supporting detail</span></div>
           <div data-step="link">Link<span>Connecting far-apart ideas into a map</span></div>
         </div>
+        <div class="aipanel" aria-label="AI engine setup">
+          <div class="aihead"><span class="eyebrow">AI engine</span><span id="aiStatus" class="pill">checking…</span></div>
+          <p class="hint">Without a key you get offline notes. With a Groq key (free), AI writes the notes + answers chat. Key stays on your server, never in GitHub.</p>
+          <div class="row airow"><input id="aiKey" placeholder="Paste Groq key (gsk_…)" autocomplete="off" spellcheck="false" /><button id="aiKeySave" class="primary">Save key</button></div>
+          <div id="aiKeyMsg" class="muted" aria-live="polite"></div>
+        </div>
       </div>
       <div class="card preview-card">
         <div class="cardhead">
