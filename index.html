@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="echoNotes — turn recorded lectures into structured conceptual notes, flashcards and concept maps." />
+<meta name="theme-color" content="#0B1020" />
+<title>echoNotes — Lecture to Conceptual Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Caveat:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap toprow">
+    <div class="brandblock">
+      <div class="eyebrow">Study workspace</div>
+      <div class="brand"><span class="logo" aria-hidden="true">◉</span> echoNotes</div>
+      <div class="tagline">Recorded lectures → usable conceptual notes</div>
+    </div>
+    <div class="authbox" aria-label="Account">
+      <span id="userLabel" class="muted status">Not logged in</span>
+      <input id="authUser" placeholder="username" autocomplete="username" />
+      <input id="authPass" type="password" placeholder="password" autocomplete="current-password" />
+      <button id="loginBtn">Login</button>
+      <button id="signupBtn" class="primary">Sign up</button>
+      <button id="logoutBtn" class="hidden">Logout</button>
+    </div>
+  </div>
+  <nav class="tabs wrap" aria-label="Workspace sections">
+    <div class="tabgroup" aria-label="Workflow">
+      <span class="tabgroup-label">Workflow</span>
+      <button data-tab="upload" class="active"><span class="n">01</span>Upload</button>
+      <button data-tab="transcript"><span class="n">02</span>Text</button>
+      <button data-tab="notes"><span class="n">03</span>Notes</button>
+      <button data-tab="flashcards"><span class="n">04</span>Cards</button>
+      <button data-tab="diagram"><span class="n">05</span>Map</button>
+    </div>
+    <div class="tabgroup" aria-label="Shelf">
+      <span class="tabgroup-label">Shelf</span>
+      <button data-tab="library">Library</button>
+      <button data-tab="terms">Terms</button>
+      <button data-tab="chat">Chat</button>
+    </div>
+  </nav>
+</header>
+
+<main class="wrap">
+  <!-- UPLOAD -->
+  <section id="tab-upload" class="panel active" aria-label="Upload lecture">
+    <ol class="wizard" aria-label="How it works">
+      <li><span class="wn">1</span><div><b>Add source</b><small>File or YouTube link</small></div></li>
+      <li><span class="wn">2</span><div><b>Process</b><small>Transcript → concepts</small></div></li>
+      <li><span class="wn">3</span><div><b>Study</b><small>Notes · cards · map</small></div></li>
+    </ol>
+    <div class="grid2">
+      <div class="card source-card">
+        <div class="cardhead">
+          <div class="eyebrow">Step 01 — Source</div>
+          <h2>Add your lecture</h2>
+          <p class="lede">Drop in a recording or paste a YouTube link. echoNotes strips announcements, repetition and noise, then keeps core concepts separate from supporting detail.</p>
+        </div>
+        <label class="field"><span class="flabel">Lecture title</span><input id="lectureTitle" placeholder="e.g. Photosynthesis - Bio 101" value="Photosynthesis - Bio 101" /></label>
+        <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Upload video or audio file">
+          <svg class="dz-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <div class="dz-text"><b>Drop video / audio here</b><small>or click to browse · MP4, MP3, WAV, WEBM</small></div>
+          <input id="fileInput" type="file" accept="video/*,audio/*" class="visually-hidden" />
+        </div>
+        <div id="fileChip" class="filechip" hidden>
+          <span class="fc-dot" aria-hidden="true"></span>
+          <span class="fc-meta"><b id="fileName">file</b><small id="fileMeta"></small></span>
+          <button id="fileClear" type="button" aria-label="Remove file">✕</button>
+        </div>
+        <div class="ordivider"><span>or</span></div>
+        <div class="ytpanel">
+          <label class="field"><span class="flabel">YouTube link <em>captions fetched automatically</em></span><input id="ytLink" placeholder="https://youtube.com/watch?v=…" inputmode="url" /></label>
+          <p class="hint">Works with watch, youtu.be, embed &amp; Shorts links. If the owner disabled captions, play the video and use Live Transcription instead.</p>
+        </div>
+        <div class="row actions">
+          <button id="processBtn" class="primary">Process lecture →</button>
+          <button id="saveLectureBtn">Save to library</button>
+          <button id="demoBtn" class="ghost" title="Loads sample data for a quick tour">Try demo data</button>
+        </div>
+        <div id="pipeline" class="pipeline hidden" aria-live="polite">
+          <div data-step="denoise">Denoise<span>Removing announcements, repetition, background noise</span></div>
+          <div data-step="transcribe">Transcribe<span>Video → timestamped text</span></div>
+          <div data-step="extract">Extract<span>Central concepts vs supporting detail</span></div>
+          <div data-step="link">Link<span>Connecting far-apart ideas into a map</span></div>
+        </div>
+      </div>
+      <div class="card preview-card">
+        <div class="cardhead">
+          <div class="eyebrow">Preview</div>
+          <h2>Player</h2>
+        </div>
+        <video id="player" controls class="player" preload="metadata"></video>
+        <div id="ytWrap"></div>
+        <div id="nowPlaying" class="muted statusline">No video loaded. Paste a YouTube link or upload a file — demo is demo-only.</div>
+        <div class="searchRow">
+          <label class="field"><span class="flabel">Search across notes</span><input id="search" placeholder="e.g. chlorophyll, evidence, application…" /></label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRANSCRIPT -->
+  <section id="tab-transcript" class="panel" aria-label="Transcript">
+    <div class="card">
+      <div class="cardhead">
+        <div class="eyebrow">Step 02 — Text</div>
+        <h2>Video → text <span class="pill">real transcription</span></h2>
+        <p class="lede">For uploaded files: start live transcription and play the video — speech is captured with timestamps. For YouTube links this happens automatically via captions. Server upload enables Whisper when an API key is configured.</p>
+      </div>
+      <div class="toolbar row">
+        <button id="liveBtn" class="primary">● Start live transcription</button>
+        <button id="liveStop">Stop</button>
+        <button id="uploadServerBtn">Upload video to server</button>
+        <button id="buildFromLiveBtn">Build notes from transcript →</button>
+      </div>
+      <div id="liveStatus" class="statusbar muted" aria-live="polite">Idle. Chrome or Edge recommended — allow microphone access.</div>
+      <div id="liveList" class="tlist"></div>
+      <hr class="sep" />
+      <div class="subhead"><h3>Cleaned transcript</h3><label class="check"><input type="checkbox" id="showNoise" /> Show removed noise</label></div>
+      <div id="transcriptList" class="tlist"></div>
+      <button id="exportTxt">Export cleaned transcript (.txt)</button>
+    </div>
+  </section>
+
+  <!-- NOTES -->
+  <section id="tab-notes" class="panel" aria-label="Conceptual notes">
+    <div class="card notes-card handwritten" id="notesCard">
+      <div class="cardhead">
+        <div class="eyebrow">Step 03 — Study</div>
+        <h2>Conceptual notes <span class="pill">core vs supporting</span></h2>
+        <p class="lede">Central concepts carry the exam weight; supporting detail carries the evidence. Every note links back to the exact video moment.</p>
+        <div class="row notestyle" role="group" aria-label="Notes style">
+          <button id="notesHandBtn" type="button">✍ Handwritten</button>
+          <button id="notesCleanBtn" type="button">Clean</button>
+        </div>
+      </div>
+      <div class="legend"><span class="coreDot"></span> Central concept <span class="supDot"></span> Supporting detail</div>
+      <div id="notesList"></div>
+      <button id="exportMd">Export notes (.md)</button>
+    </div>
+  </section>
+
+  <!-- FLASHCARDS -->
+  <section id="tab-flashcards" class="panel" aria-label="Flashcards">
+    <div class="card center narrow">
+      <div class="cardhead center">
+        <div class="eyebrow">Step 03 — Recall</div>
+        <h2>Flashcards <span id="cardCount" class="pill">0 cards</span></h2>
+      </div>
+      <div id="flashcard" class="flash" role="button" tabindex="0" aria-label="Flashcard, activate to flip"><div id="flashInner" class="flash-inner">
+        <div class="face front"><p id="cardQ">Process a lecture first</p><small class="cardhint">Click to reveal</small></div>
+        <div class="face back"><p id="cardA"></p><small id="cardSrc"></small></div>
+      </div></div>
+      <div class="row centerRow">
+        <button id="prevCard">← Prev</button>
+        <button id="flipCard" class="primary">Flip</button>
+        <button id="nextCard">Next →</button>
+        <button id="shuffleCards">Shuffle</button>
+      </div>
+      <div class="row centerRow progressrow">
+        <button id="knowBtn">Mark known</button>
+        <span id="progress" class="muted"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- DIAGRAM -->
+  <section id="tab-diagram" class="panel" aria-label="Concept map">
+    <div class="card">
+      <div class="cardhead">
+        <div class="eyebrow">Step 03 — Connect</div>
+        <h2>Concept map <span class="pill">links far-apart ideas</span></h2>
+        <p class="lede">Ideas introduced minutes apart belong together. Select a node to see its note and jump to the video moment.</p>
+      </div>
+      <svg id="graph" viewBox="0 0 720 380" class="graph" role="img" aria-label="Concept map"></svg>
+      <div id="nodeInfo" class="muted captionbar">Select a node…</div>
+    </div>
+  </section>
+
+  <!-- LIBRARY -->
+  <section id="tab-library" class="panel" aria-label="Library">
+    <div class="card">
+      <div class="cardhead">
+        <div class="eyebrow">Shelf</div>
+        <h2>My library <span class="pill">per account</span></h2>
+        <p class="lede">Saved lectures follow your login across devices when the server is running.</p>
+      </div>
+      <div id="libraryList" class="tlist"></div>
+    </div>
+  </section>
+
+  <!-- TERMS -->
+  <section id="tab-terms" class="panel" aria-label="Key terms">
+    <div class="card">
+      <div class="cardhead">
+        <div class="eyebrow">Shelf</div>
+        <h2>Key terms <span class="pill">glossary</span></h2>
+        <p class="lede">Pin the vocabulary that matters. Terms are seeded from your notes and saved to your account.</p>
+      </div>
+      <div class="row termform"><input id="termInput" placeholder="Term — e.g. Chlorophyll" /><input id="termDef" placeholder="Definition…" /><button id="addTermBtn" class="primary">Save term</button></div>
+      <div id="termsList" class="tlist"></div>
+      <button id="exportTerms">Export terms (.json)</button>
+    </div>
+  </section>
+
+  <!-- CHAT -->
+  <section id="tab-chat" class="panel" aria-label="Ask this lecture">
+    <div class="card">
+      <div class="cardhead">
+        <div class="eyebrow">Shelf</div>
+        <h2>Ask this lecture <span class="pill">saved per account</span></h2>
+        <p class="lede">Questions are answered from your transcript and notes — with timestamps, not guesses.</p>
+      </div>
+      <div id="chatBox" class="chat" aria-live="polite"></div>
+      <div class="row chatbar"><input id="chatInput" placeholder="Ask — e.g. What evidence supports this?" /><button id="chatSend" class="primary">Send</button><button id="chatClear" class="ghost">Clear</button></div>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap footgrid"><span><b>echoNotes</b> · core concepts, supporting detail, timestamps</span><span class="muted">Study workspace for recorded lectures</span></div></footer>
+<script src="app.js"></script>
+<script>
+// Upload dropzone + file chip (progressive enhancement; transcription logic lives in app.js)
+(function () {
+  var dz = document.getElementById('dropzone'), fi = document.getElementById('fileInput'),
+      chip = document.getElementById('fileChip'), nm = document.getElementById('fileName'),
+      meta = document.getElementById('fileMeta'), clear = document.getElementById('fileClear');
+  if (!dz || !fi) return;
+  function show() {
+    var f = fi.files && fi.files[0];
+    if (!f) { chip.hidden = true; return; }
+    chip.hidden = false; nm.textContent = f.name;
+    meta.textContent = (f.size ? (f.size / 1048576).toFixed(1) + ' MB · ' : '') + (f.type || 'media');
+  }
+  fi.addEventListener('change', show);
+  clear.addEventListener('click', function (e) { e.stopPropagation(); fi.value = ''; show(); });
+  ['dragenter', 'dragover'].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add('over'); }); });
+  ['dragleave', 'drop'].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove('over'); }); });
+  dz.addEventListener('drop', function (e) {
+    if (e.dataTransfer.files && e.dataTransfer.files.length) {
+      fi.files = e.dataTransfer.files;
+      fi.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+  dz.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('button')) return; fi.click(); });
+  dz.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fi.click(); } });
+  var fc = document.getElementById('flashcard');
+  if (fc) fc.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fc.click(); } });
+})();
+</script>
+<script>
+// Notes style toggle: AI notebook (handwritten) vs clean — preference persists
+(function () {
+  var card = document.getElementById('notesCard'),
+      hand = document.getElementById('notesHandBtn'),
+      clean = document.getElementById('notesCleanBtn');
+  if (!card || !hand || !clean) return;
+  function apply(mode) {
+    var hw = mode !== 'clean';
+    card.classList.toggle('handwritten', hw);
+    hand.classList.toggle('on', hw);
+    clean.classList.toggle('on', !hw);
+    try { localStorage.setItem('echoNotes_notesStyle', hw ? 'hand' : 'clean'); } catch (e) {}
+  }
+  hand.addEventListener('click', function () { apply('hand'); });
+  clean.addEventListener('click', function () { apply('clean'); });
+  var saved = 'hand';
+  try { saved = localStorage.getItem('echoNotes_notesStyle') || 'hand'; } catch (e) {}
+  apply(saved);
+})();
+</script>
+</body>
+</html>
