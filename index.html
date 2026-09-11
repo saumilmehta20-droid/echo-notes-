@@ -15,7 +15,7 @@
 <header class="topbar">
   <div class="wrap toprow">
     <div class="brandblock">
-      <div class="eyebrow">Study workspace</div>
+      <div class="eyebrow">Study workspace · <span id="serverDot" class="srvdot" aria-hidden="true">●</span> <span id="serverMsg" class="srvmsg">checking server…</span></div>
       <div class="brand"><span class="logo" aria-hidden="true">◉</span> echoNotes</div>
       <div class="tagline">Recorded lectures → usable conceptual notes</div>
     </div>
@@ -78,10 +78,11 @@
           <p class="hint">Works with watch, youtu.be, embed &amp; Shorts links. If the owner disabled captions, play the video and use Live Transcription instead.</p>
         </div>
         <div class="row actions">
-          <button id="processBtn" class="primary">Process lecture →</button>
+          <button id="processBtn" class="primary">✨ AI study pass →</button>
           <button id="saveLectureBtn">Save to library</button>
           <button id="demoBtn" class="ghost" title="Loads sample data for a quick tour">Try demo data</button>
         </div>
+        <div id="processMsg" class="statusbar" hidden aria-live="polite"></div>
         <div id="pipeline" class="pipeline hidden" aria-live="polite">
           <div data-step="denoise">Denoise<span>Removing announcements, repetition, background noise</span></div>
           <div data-step="transcribe">Transcribe<span>Video → timestamped text</span></div>

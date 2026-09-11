@@ -35,6 +35,11 @@ p{margin:0}
 .topbar{position:sticky;top:0;z-index:20;background:rgba(11,16,32,.88);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
 .toprow{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;padding:18px 0 10px;flex-wrap:wrap}
 .eyebrow{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.srvdot{font-size:10px;letter-spacing:0;vertical-align:1px}
+.srvdot.on{color:var(--green);text-shadow:0 0 8px var(--green)}
+.srvdot.off{color:var(--red);text-shadow:0 0 8px var(--red)}
+.srvmsg{color:var(--faint);letter-spacing:.02em;text-transform:none;font-weight:500}
+#processMsg{margin-top:14px}
 .brand{font-family:var(--font-display);font-size:26px;font-weight:800;letter-spacing:-.02em}
 .logo{color:var(--accent)}
 .tagline{color:var(--sub);font-size:13px;margin-top:2px}

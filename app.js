@@ -492,7 +492,7 @@ $('buildFromLiveBtn').onclick = () => {
   state.data = buildFromTranscript($('lectureTitle').value || 'Live lecture', liveSegs);
   state.cardIdx = 0; state.known = new Set();
   renderAll(); renderTerms(); renderChat();
-  go('transcript');
+  go(state.data.notes.length ? 'notes' : 'transcript');
 };
 
 async function runPipeline(steps) {
@@ -524,20 +524,28 @@ async function processLecture(useDemo) {
   const ytId = ytUrl ? parseYtId(ytUrl) : null;
   if (ytUrl && !ytId) return alert('That YouTube link looks invalid.');
   if (ytId) {
+    setProcessMsg('AI pass 1/3 — fetching video captions…');
     await runPipeline();
-    setLiveStatus('Fetching YouTube captions…');
     setYouTube(ytUrl);
     liveSegs = [];
     try {
+      setProcessMsg('AI pass 2/3 — reading the lecture…');
       const r = await fetch(API_BASE + '/api/youtube-transcript?url=' + encodeURIComponent(ytUrl));
       const j = await r.json();
       if (!r.ok) {
-        setLiveStatus('YouTube: ' + (j.error || 'failed') + ' — playing video; use Live Transcription while it plays.');
-        go('transcript'); return;
+        const err = 'YouTube: ' + (j.error || 'failed') + ' — video is playing above; use Live Transcription while it plays.';
+        setProcessMsg(err); setLiveStatus(err);
+        return;
       }
       if (j.title && !$('lectureTitle').value) $('lectureTitle').value = j.title;
       const title = $('lectureTitle').value || j.title || 'YouTube lecture';
       liveSegs = j.segments || [];
+      if (!liveSegs.length) {
+        const err = 'YouTube returned no speech for this video. Play it above and use Live Transcription instead.';
+        setProcessMsg(err); setLiveStatus(err);
+        return;
+      }
+      setProcessMsg('AI pass 3/3 — writing handwritten notes…');
       state.data = buildFromTranscript(title, liveSegs);
       state.data.id = 'lec_' + Date.now();
       state.data.source = { yt: j.videoId };
@@ -545,11 +553,22 @@ async function processLecture(useDemo) {
       setLiveStatus(`YouTube captions loaded: ${liveSegs.length} segments from "${title}".`);
       state.cardIdx = 0; state.known = new Set();
       renderAll(); renderLibrary(); renderTerms(); renderChat();
-      go('transcript');
+      if (!state.data.notes.length) {
+        setProcessMsg('Transcript loaded but no standout points found — the video may be mostly music/intros. Try a longer lecture.');
+        go('transcript'); return;
+      }
+      setProcessMsg(`Done — ${state.data.notes.length} notes + ${state.data.cards.length} cards written from "${title}".`, false);
+      go('notes');
       return;
-    } catch (e) { setLiveStatus('YouTube fetch failed (server running?): ' + e.message); go('transcript'); return; }
+    } catch (e) {
+      const err = 'Cannot reach the server. Start it first: cd echoNotes/server, then: node server.js (' + e.message + ')';
+      setProcessMsg(err); setLiveStatus(err);
+      checkBackend();
+      return;
+    }
   }
   if (liveSegs.length) { // transcribed file/audio via Live or Whisper upload
+    setProcessMsg('AI pass — writing handwritten notes…');
     await runPipeline();
     ytVideoId = null; setYouTube('');
     const title = $('lectureTitle').value || $('fileInput').files[0]?.name || 'Uploaded lecture';
@@ -557,11 +576,16 @@ async function processLecture(useDemo) {
     state.data.id = 'lec_' + Date.now();
     state.cardIdx = 0; state.known = new Set();
     renderAll(); renderLibrary(); renderTerms(); renderChat();
-    go('transcript');
+    setProcessMsg(`Done — ${state.data.notes.length} notes + ${state.data.cards.length} cards.`, false);
+    go('notes');
     return;
   }
-  if ($('fileInput').files[0]) return alert('File selected but no transcript yet. Go to Transcript tab → Start Live Transcription → play the video → Stop → Build notes. (Or Upload video to server if Whisper key is set.)');
-  return alert('Paste a YouTube link, or upload a file and transcribe it first. "Load Demo" is demo-only.');
+  if ($('fileInput').files[0]) {
+    setProcessMsg('File selected but no transcript yet — Transcript tab → Start Live Transcription → play → Stop → Build notes.');
+    return alert('File selected but no transcript yet. Go to Transcript tab → Start Live Transcription → play the video → Stop → Build notes. (Or Upload video to server if Whisper key is set.)');
+  }
+  setProcessMsg('Paste a YouTube link above, then press "AI study pass".');
+  return alert('Paste a YouTube link, or upload a file and transcribe it first. "Try demo data" is demo-only.');
 }
 
 $('processBtn').onclick = () => processLecture(false);
@@ -671,7 +695,22 @@ async function api(path, opts = {}) {
   return r.json();
 }
 let backendOn = false;
-async function checkBackend() { try { await fetch(API_BASE + '/api/me', { headers: getToken() ? { Authorization: 'Bearer ' + getToken() } : {} }); backendOn = true; } catch { backendOn = false; } }
+function setProcessMsg(s, show) {
+  const m = $('processMsg'); if (!m) return;
+  m.hidden = show === false;
+  if (show !== false) m.textContent = s;
+}
+async function checkBackend() {
+  const dot = $('serverDot'), msg = $('serverMsg');
+  const paint = (on, t) => {
+    if (dot) dot.className = 'srvdot ' + (on ? 'on' : 'off');
+    if (msg) msg.textContent = t;
+  };
+  try {
+    await fetch(API_BASE + '/api/me', { headers: getToken() ? { Authorization: 'Bearer ' + getToken() } : {} });
+    backendOn = true; paint(true, 'server live');
+  } catch { backendOn = false; paint(false, 'server offline — run node server.js'); }
+}
 checkBackend();
 // ---- Auth: backend first, local fallback ----
 const hash = s => btoa(unescape(encodeURIComponent('echo:'+s))).split('').reverse().join('');
